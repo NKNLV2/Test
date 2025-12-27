@@ -155,12 +155,10 @@ hands.setOptions({
 });
 
 hands.onResults(results=>{
-  const status = document.getElementById("status");
-
-  if(results.multiHandLandmarks && results.multiHandLandmarks.length > 0){
-    status.textContent = "Đã thấy tay ✌️";
+  if(results.multiHandLandmarks && results.multiHandLandmarks.length>0){
 
     let dists=[];
+
     results.multiHandLandmarks.forEach(hand=>{
       const a = hand[4];
       const b = hand[8];
@@ -170,15 +168,15 @@ hands.onResults(results=>{
 
     const avg = dists.reduce((a,b)=>a+b,0)/dists.length;
 
+    console.log("distance:", avg);   // 👈 thêm dòng này
+
     targetRadius = THREE.MathUtils.clamp(
       THREE.MathUtils.mapLinear(avg,0.03,0.2,1,4),
       1,4
     );
-  } else {
-    status.textContent = "Đang chờ tay…";
-    targetRadius = 1.2;
   }
 });
+
 
 /* camera */
 const cam = new Camera(video,{
@@ -214,3 +212,4 @@ animate();
 </script>
 </body>
 </html>
+
