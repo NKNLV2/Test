@@ -1,203 +1,152 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
+<title>Hand Interactive Particle Ring</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gesture Particle Sphere</title>
-
-<!-- THREE -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-<!-- MediaPipe -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
 <style>
-body{
-  margin:0;
-  background:#0d1117;
-  font-family:system-ui;
-  color:#fff;
-  overflow:hidden;
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
 }
-
-/* UI */
-#ui{
-  position:fixed;
-  top:14px;
-  left:14px;
-  display:flex;
-  gap:10px;
-  align-items:center;
-  padding:10px 14px;
-  background:#161b22;
-  border-radius:14px;
-  box-shadow:0 10px 30px rgba(0,0,0,.4);
-  z-index:3;
-}
-
-#color{
-  width:34px;
-  height:34px;
-  border:none;
-  border-radius:8px;
-}
-
-#status{font-size:14px;opacity:.85}
-
-/* video preview */
-#video{
-  position:fixed;
-  right:16px;
-  bottom:16px;
-  width:240px;
-  border-radius:14px;
-  opacity:.35;
-  transform:scaleX(-1);
-  z-index:1;
-}
-
-canvas{
-  display:block;
-  position:relative;
-  z-index:2;
+video {
+  display: none;
 }
 </style>
 </head>
-
 <body>
-
-<div id="ui">
-  <label>Màu hạt:</label>
-  <input type="color" id="color" value="#00aaff">
-  <div id="status">Đang chờ tay…</div>
-</div>
 
 <video id="video" autoplay playsinline></video>
 
-<script>
-/* =========================
-   THREE
-========================= */
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
-camera.position.set(0,0,4);
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(devicePixelRatio);
-renderer.setClearColor("#0d1117");
+<script>
+/* ===== THREE.JS ===== */
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(
+  60,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+camera.position.z = 120;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-/* PARTICLES */
-const COUNT = 4500;
-const base = new Float32Array(COUNT*3);
+/* ===== PARTICLE RING ===== */
+const COUNT = 3000;
+const RADIUS = 40;
 
-for(let i=0;i<COUNT;i++){
-  const u = Math.random();
-  const v = Math.random();
-  const t = 2*Math.PI*u;
-  const p = Math.acos(2*v-1);
+const positions = new Float32Array(COUNT * 3);
+const colors = new Float32Array(COUNT * 3);
 
-  base[i*3]   = Math.sin(p)*Math.cos(t);
-  base[i*3+1] = Math.sin(p)*Math.sin(t);
-  base[i*3+2] = Math.cos(p);
+for (let i = 0; i < COUNT; i++) {
+  const angle = (i / COUNT) * Math.PI * 2;
+  positions[i * 3]     = Math.cos(angle) * RADIUS;
+  positions[i * 3 + 1] = Math.sin(angle) * RADIUS;
+  positions[i * 3 + 2] = 0;
+
+  colors[i * 3]     = 0.2;
+  colors[i * 3 + 1] = 1.0;
+  colors[i * 3 + 2] = 0.6;
 }
 
-const geo = new THREE.BufferGeometry();
-geo.setAttribute("position", new THREE.BufferAttribute(base,3));
+const geometry = new THREE.BufferGeometry();
+geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
-const mat = new THREE.PointsMaterial({
-  size:0.05,
-  color:"#00aaff"
+const material = new THREE.PointsMaterial({
+  size: 1.2,
+  vertexColors: true,
+  transparent: true,
 });
 
-const pts = new THREE.Points(geo,mat);
-scene.add(pts);
+const ring = new THREE.Points(geometry, material);
+scene.add(ring);
 
-/* Color picker */
-document.getElementById("color").addEventListener("input",e=>{
-  mat.color.set(e.target.value);
-});
-
-/* Resize */
-addEventListener("resize",()=>{
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
-
-/* =========================
-   HAND TRACKING
-========================= */
-const video = document.getElementById("video");
-let targetR = 1.2;
-let curR = 1.2;
+/* ===== HAND TRACKING ===== */
+let handX = 0;
+let handY = 0;
+let handZ = 0;
 
 const hands = new Hands({
-  locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  locateFile: (file) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
 });
 
 hands.setOptions({
-  selfieMode:true,
-  maxNumHands:2,
-  modelComplexity:1,
-  minDetectionConfidence:0.6,
-  minTrackingConfidence:0.6
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.6,
+  minTrackingConfidence: 0.6
 });
 
-hands.onResults(r=>{
-  const st = document.getElementById("status");
-
-  if(r.multiHandLandmarks && r.multiHandLandmarks.length){
-    st.textContent = "Đã thấy tay ✌";
-
-    let ds = [];
-    r.multiHandLandmarks.forEach(h=>{
-      const a=h[4], b=h[8];
-      const dx=a.x-b.x, dy=a.y-b.y, dz=a.z-b.z;
-      ds.push(Math.sqrt(dx*dx+dy*dy+dz*dz));
-    });
-
-    const avg = ds.reduce((a,b)=>a+b,0)/ds.length;
-
-    targetR = THREE.MathUtils.clamp(
-      THREE.MathUtils.mapLinear(avg,0.03,0.22,1,4),
-      1,4
-    );
-  }else{
-    st.textContent = "Đang chờ tay…";
-    targetR = 1.2;
+hands.onResults((results) => {
+  if (results.multiHandLandmarks.length > 0) {
+    const lm = results.multiHandLandmarks[0][9];
+    handX = (lm.x - 0.5) * 2;
+    handY = (0.5 - lm.y) * 2;
+    handZ = lm.z;
   }
 });
 
-const cam = new Camera(video,{
-  onFrame:async()=>{ await hands.send({image:video}); },
-  width:640,
-  height:480
+const video = document.getElementById("video");
+const cam = new Camera(video, {
+  onFrame: async () => await hands.send({ image: video }),
+  width: 640,
+  height: 480
 });
 cam.start();
 
-/* =========================
-   LOOP
-========================= */
-function loop(){
-  requestAnimationFrame(loop);
+/* ===== ANIMATE ===== */
+function animate() {
+  requestAnimationFrame(animate);
 
-  curR += (targetR-curR)*0.12;
+  const pos = geometry.attributes.position.array;
 
-  const pos = geo.attributes.position.array;
-  for(let i=0;i<COUNT;i++){
-    const ix=i*3;
-    pos[ix]   = base[ix]*curR;
-    pos[ix+1] = base[ix+1]*curR;
-    pos[ix+2] = base[ix+2]*curR;
+  for (let i = 0; i < COUNT; i++) {
+    const idx = i * 3;
+    const angle = (i / COUNT) * Math.PI * 2;
+
+    const wave = Math.sin(angle * 6 + performance.now() * 0.003);
+
+    const influence = Math.max(0, 1 - Math.abs(handZ) * 15);
+
+    const dynamicRadius =
+      RADIUS +
+      wave * 6 * influence +
+      handX * 12;
+
+    pos[idx]     = Math.cos(angle) * dynamicRadius;
+    pos[idx + 1] = Math.sin(angle) * dynamicRadius;
+    pos[idx + 2] = wave * 10 * influence;
   }
-  geo.attributes.position.needsUpdate = true;
 
-  renderer.render(scene,camera);
+  geometry.attributes.position.needsUpdate = true;
+
+  ring.rotation.z += 0.002 + handX * 0.01;
+  ring.rotation.x += handY * 0.01;
+
+  renderer.render(scene, camera);
 }
-loop();
+
+animate();
+
+/* ===== RESIZE ===== */
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
+
 </body>
 </html>
